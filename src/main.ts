@@ -306,7 +306,7 @@ async function main(): Promise<void> {
       pauseOverlay.hide();
       stopLevelMusic();
       selectedLevelIndex = currentLevelIndex;
-      container.classList.remove('game-started');
+      container?.classList.remove('game-started');
       const menu = document.getElementById('main-menu');
       if (menu) menu.classList.remove('hidden');
     }
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
         setLoadingVisible(false);
         const menu = document.getElementById('main-menu');
         if (menu) menu.classList.remove('hidden');
-        container.classList.remove('game-started');
+        container?.classList.remove('game-started');
         showLoadError(err);
       });
     }
@@ -489,7 +489,7 @@ async function main(): Promise<void> {
   function startGame(): void {
     const menu = document.getElementById('main-menu');
     if (menu) menu.classList.add('hidden');
-    container.classList.add('game-started');
+    container?.classList.add('game-started');
     setLoadingVisible(true);
     loadLevel(selectedLevelIndex, false);
     animate();
