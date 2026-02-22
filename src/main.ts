@@ -226,6 +226,7 @@ async function main(): Promise<void> {
   let timeScale = 1;
   let smoothedFov = BASE_FOV;
   let worldGroup: THREE.Group | null = null;
+  let goalMesh: THREE.Group | null = null;
   let colliders: PlatformCollider[] = [];
   let coins: Coin[] = [];
   let hazards: Hazard[] = [];
@@ -307,10 +308,12 @@ async function main(): Promise<void> {
       }
 
       stopLevelMusic();
-      playLevelMusic(levelData.music);
+      const musicUrl = (import.meta.env.BASE_URL || '/') + levelData.music.replace(/^\//, '');
+      playLevelMusic(musicUrl);
 
       createWorld(levelData).then((result) => {
         worldGroup = result.scene;
+        goalMesh = result.goalMesh;
         colliders = result.colliders;
         scene.add(worldGroup);
 
@@ -668,6 +671,7 @@ async function main(): Promise<void> {
     }
 
     timeScale = Math.min(1, timeScale + dt * 5);
+    if (goalMesh) goalMesh.rotation.y += effectiveDt * 1.2;
     landingFovBump *= Math.max(0, 1 - dt * 25);
     const shakeOffset = updateCameraShake(dt);
     const speedFactor = Math.sqrt(player.velocity.x ** 2 + player.velocity.z ** 2) / 8;

@@ -3,8 +3,9 @@ import path from 'path';
 import fs from 'fs';
 
 const ASSETS_BASE = '/Assets/';
+const ASSETS_SOURCE = path.join(process.cwd(), 'Assets');
 
-// Serve Assets folder at /Assets so Retro Medieval Kit can be loaded by URL
+// Serve Assets folder at /Assets (dev) and copy into dist (build) so the pack works in production
 function serveAssets() {
   return {
     name: 'serve-assets',
@@ -13,7 +14,7 @@ function serveAssets() {
         const url = req.url?.split('?')[0] ?? '';
         if (!url.startsWith(ASSETS_BASE)) return next();
         const relative = url.slice(ASSETS_BASE.length).replace(/^\//, '');
-        const filePath = path.join(process.cwd(), 'Assets', relative);
+        const filePath = path.join(ASSETS_SOURCE, relative);
         if (!fs.existsSync(filePath)) return next();
         const stat = fs.statSync(filePath);
         if (!stat.isFile()) return next();
@@ -23,6 +24,26 @@ function serveAssets() {
         stream.pipe(res as NodeJS.WritableStream);
         return;
       });
+    },
+    closeBundle() {
+      const outDir = path.join(process.cwd(), 'dist');
+      const dest = path.join(outDir, 'Assets');
+      if (!fs.existsSync(ASSETS_SOURCE)) return;
+      if (!fs.existsSync(outDir)) return;
+      function copyRecursive(src: string, dst: string) {
+        if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true });
+        for (const name of fs.readdirSync(src)) {
+          const srcPath = path.join(src, name);
+          const dstPath = path.join(dst, name);
+          if (fs.statSync(srcPath).isDirectory()) {
+            copyRecursive(srcPath, dstPath);
+          } else {
+            fs.copyFileSync(srcPath, dstPath);
+          }
+        }
+      }
+      copyRecursive(ASSETS_SOURCE, dest);
+      console.log('Copied Assets (Retro Medieval Kit) to dist/Assets');
     },
   };
 }
@@ -38,5 +59,6 @@ function getMime(p: string): string {
 export default defineConfig({
   root: '.',
   publicDir: 'public',
+  base: '/3d-platformer/', // GitHub Pages project site; use '/' for custom domain or Vercel
   plugins: [serveAssets()],
 });
