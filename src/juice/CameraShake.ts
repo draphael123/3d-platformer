@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getReducedMotion } from '../settings';
 
 let intensity = 0;
 let duration = 0;
@@ -9,9 +10,12 @@ function rand(): number {
 }
 
 export function shake(amount: number, time: number): void {
-  if (amount > intensity || time > duration) {
-    intensity = amount;
-    duration = time;
+  const scale = getReducedMotion() ? 0.2 : 1;
+  const a = amount * scale;
+  const t = time * scale;
+  if (a > intensity || t > duration) {
+    intensity = a;
+    duration = t;
   }
 }
 

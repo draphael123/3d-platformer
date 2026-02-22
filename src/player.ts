@@ -69,6 +69,11 @@ export class Player {
     this.velocity.set(0, 0, 0);
   }
 
+  /** Set a single input (for touch controls). */
+  setInput(key: keyof PlayerInput, value: boolean): void {
+    this.input[key] = value;
+  }
+
   getAABB(): { min: THREE.Vector3; max: THREE.Vector3 } {
     const p = this.mesh.position;
     return {
