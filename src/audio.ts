@@ -1,11 +1,25 @@
+const MUSIC_VOLUME_KEY = 'platformer-music-volume';
+
 let currentAudio: HTMLAudioElement | null = null;
+let musicVolume = (() => {
+  try {
+    const v = parseFloat(localStorage.getItem(MUSIC_VOLUME_KEY) ?? '0.5');
+    return Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0.5));
+  } catch {
+    return 0.5;
+  }
+})();
+
+export function getMusicVolume(): number {
+  return musicVolume;
+}
 
 export function playLevelMusic(musicPath: string, loop = true): void {
   stopLevelMusic();
   const audio = new Audio(musicPath);
   currentAudio = audio;
   audio.loop = loop;
-  audio.volume = 0.5;
+  audio.volume = musicVolume;
   audio.play().catch(() => {
     // Autoplay or file not found - ignore
   });
@@ -20,7 +34,13 @@ export function stopLevelMusic(): void {
 }
 
 export function setMusicVolume(vol: number): void {
-  if (currentAudio) currentAudio.volume = Math.max(0, Math.min(1, vol));
+  musicVolume = Math.max(0, Math.min(1, vol));
+  try {
+    localStorage.setItem(MUSIC_VOLUME_KEY, String(musicVolume));
+  } catch {
+    /* ignore */
+  }
+  if (currentAudio) currentAudio.volume = musicVolume;
 }
 
 const SFX_POOL_SIZE = 10;

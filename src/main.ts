@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createWorld } from './world';
 import { Player } from './player';
-import { playLevelMusic, stopLevelMusic, playSfx, playSfxWithPitch } from './audio';
+import { playLevelMusic, stopLevelMusic, playSfx, playSfxWithPitch, getMusicVolume, setMusicVolume } from './audio';
 import { LEVELS, TOTAL_LEVELS, type LevelData } from './types';
 import { Coin, aabbOverlap } from './entities/Coin';
 import { Hazard } from './entities/Hazard';
@@ -412,7 +412,22 @@ async function main(): Promise<void> {
     return true;
   }
 
-  loadLevel(0, false);
+  function startGame(): void {
+    const menu = document.getElementById('main-menu');
+    if (menu) menu.classList.add('hidden');
+    loadLevel(0, false);
+    animate();
+  }
+
+  const menuPlay = document.getElementById('menu-play');
+  const menuMusicSlider = document.getElementById('menu-music-volume') as HTMLInputElement | null;
+  if (menuMusicSlider) {
+    menuMusicSlider.value = String(Math.round(getMusicVolume() * 100));
+    menuMusicSlider.addEventListener('input', () => {
+      setMusicVolume(Number(menuMusicSlider.value) / 100);
+    });
+  }
+  if (menuPlay) menuPlay.addEventListener('click', startGame);
 
   let prevTime = performance.now() / 1000;
 
@@ -698,7 +713,17 @@ async function main(): Promise<void> {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  animate();
+  // Game starts when user clicks Play on the main menu (startGame calls loadLevel + animate)
 }
 
-main();
+function showLoadError(err: unknown): void {
+  const wrap = document.getElementById('load-error');
+  const msg = document.getElementById('load-error-message');
+  if (wrap && msg) {
+    msg.textContent = err instanceof Error ? err.message : String(err);
+    (wrap as HTMLElement).style.display = 'flex';
+  }
+  console.error('Game failed to start:', err);
+}
+
+main().catch(showLoadError);
