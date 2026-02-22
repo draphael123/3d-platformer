@@ -520,7 +520,6 @@ async function main(): Promise<void> {
     }
   }
 
-  const menuPlay = document.getElementById('menu-play');
   const menuMusicSlider = document.getElementById('menu-music-volume') as HTMLInputElement | null;
   const menuSfxSlider = document.getElementById('menu-sfx-volume') as HTMLInputElement | null;
   const menuReducedMotion = document.getElementById('menu-reduced-motion') as HTMLInputElement | null;
@@ -540,12 +539,15 @@ async function main(): Promise<void> {
     menuReducedMotion.checked = getReducedMotion();
     menuReducedMotion.addEventListener('change', () => setReducedMotion(menuReducedMotion.checked));
   }
-  if (menuPlay) {
-    menuPlay.addEventListener('click', () => {
-      try { playSfxEvent('click'); } catch { /* ignore */ }
-      startGame();
-    });
-  }
+  // Delegated click so Play works even if canvas or other layer intercepts
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('#menu-play')) return;
+    const menu = document.getElementById('main-menu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    try { playSfxEvent('click'); } catch { /* ignore */ }
+    startGame();
+  }, true);
 
   const touchControls = document.getElementById('touch-controls');
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
