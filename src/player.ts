@@ -40,7 +40,13 @@ export class Player {
 
   constructor() {
     const geom = new THREE.BoxGeometry(0.8, 1.6, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x3498db });
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x3498db,
+      emissive: 0x1144aa,
+      emissiveIntensity: 0.12,
+      metalness: 0.15,
+      roughness: 0.75,
+    });
     this.mesh = new THREE.Mesh(geom, mat);
     this.mesh.castShadow = true;
     this.mesh.position.set(0, 1, 5);

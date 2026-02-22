@@ -176,30 +176,51 @@ function setTransitionVisible(visible: boolean): void {
   if (el) el.classList.toggle('visible', visible);
 }
 
+function makeGradientTexture(topHex: number, bottomHex: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const top = new THREE.Color(topHex);
+  const bottom = new THREE.Color(bottomHex);
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, `rgb(${Math.round(top.r * 255)},${Math.round(top.g * 255)},${Math.round(top.b * 255)})`);
+  grad.addColorStop(1, `rgb(${Math.round(bottom.r * 255)},${Math.round(bottom.g * 255)},${Math.round(bottom.b * 255)})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+
 async function main(): Promise<void> {
   const container = document.getElementById('app');
   if (!container) return;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb);
+  scene.background = makeGradientTexture(0x87ceeb, 0xb8d8e8);
   scene.fog = new THREE.Fog(0x87ceeb, 20, 60);
 
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(CAMERA_OFFSET.x, CAMERA_OFFSET.y, CAMERA_OFFSET.z);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  if ('outputColorSpace' in renderer) (renderer as THREE.WebGLRenderer & { outputColorSpace: string }).outputColorSpace = 'srgb';
   container.insertBefore(renderer.domElement, container.firstChild);
 
-  const ambient = new THREE.AmbientLight(0x404060, 0.6);
+  const ambient = new THREE.AmbientLight(0x506080, 0.5);
   scene.add(ambient);
-  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.4);
+  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.55);
   scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(12, 20, 10);
+  const dir = new THREE.DirectionalLight(0xfff5e6, 1);
+  dir.position.set(14, 22, 10);
   dir.castShadow = true;
   dir.shadow.mapSize.set(2048, 2048);
   dir.shadow.camera.near = 0.5;
@@ -209,6 +230,9 @@ async function main(): Promise<void> {
   dir.shadow.camera.top = 25;
   dir.shadow.camera.bottom = -25;
   scene.add(dir);
+  const fill = new THREE.DirectionalLight(0xb8d4f0, 0.35);
+  fill.position.set(-10, 8, -8);
+  scene.add(fill);
 
   const player = new Player();
   scene.add(player.mesh);
@@ -296,13 +320,13 @@ async function main(): Promise<void> {
 
       hadDamageThisLevel = false;
       if (levelData.theme === 'forest') {
-        scene.background = new THREE.Color(0x5a8a5a);
+        scene.background = makeGradientTexture(0x3d6b4f, 0x6b9b7a);
         scene.fog = new THREE.Fog(0x5a8a5a, 20, 60);
       } else if (levelData.theme === 'dungeon') {
-        scene.background = new THREE.Color(0x1a1520);
+        scene.background = makeGradientTexture(0x0d0a10, 0x1a1520);
         scene.fog = new THREE.Fog(0x2a2030, 15, 45);
       } else {
-        scene.background = new THREE.Color(0x87ceeb);
+        scene.background = makeGradientTexture(0x87ceeb, 0xb8d8e8);
         scene.fog = new THREE.Fog(0x87ceeb, 20, 60);
       }
 
@@ -692,7 +716,14 @@ async function main(): Promise<void> {
     }
 
     timeScale = Math.min(1, timeScale + dt * 5);
-    if (goalMesh) goalMesh.rotation.y += effectiveDt * 1.2;
+    if (goalMesh) {
+      goalMesh.rotation.y += effectiveDt * 1.2;
+      const ring = goalMesh.children[1];
+      if (ring instanceof THREE.Mesh && ring.material instanceof THREE.MeshStandardMaterial) {
+        const mat = ring.material;
+        mat.emissiveIntensity = 0.5 + 0.35 * Math.sin(prevTime * 2.5);
+      }
+    }
     landingFovBump *= Math.max(0, 1 - dt * 25);
     const shakeOffset = updateCameraShake(dt);
     const speedFactor = Math.sqrt(player.velocity.x ** 2 + player.velocity.z ** 2) / 8;
