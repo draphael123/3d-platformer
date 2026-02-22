@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createWorld } from './world';
 import { Player } from './player';
-import { playLevelMusic, stopLevelMusic, playSfx, playSfxWithPitch, getMusicVolume, setMusicVolume } from './audio';
+import { playLevelMusic, stopLevelMusic, playSfxEvent, getMusicVolume, setMusicVolume, getSfxVolume, setSfxVolume } from './audio';
 import { LEVELS, TOTAL_LEVELS, type LevelData } from './types';
 import { Coin, aabbOverlap } from './entities/Coin';
 import { Hazard } from './entities/Hazard';
@@ -19,7 +19,6 @@ const CAMERA_LERP = 0.08;
 const INVINCIBLE_DURATION = 1.5;
 const INITIAL_LIVES = 3;
 const BASE_FOV = 75;
-const SFX_PATH = '/sfx/';
 
 function createPauseOverlay(onResume: () => void, onRestart: () => void): { show: () => void; hide: () => void; isVisible: () => boolean } {
   const overlay = document.getElementById('pause-overlay');
@@ -31,7 +30,7 @@ function createPauseOverlay(onResume: () => void, onRestart: () => void): { show
   resumeBtn.onclick = () => onResume();
   restartBtn.onclick = () => onRestart();
   return {
-    show: () => { overlay.classList.add('visible'); playSfx(SFX_PATH + 'pause.mp3', 0.3); },
+    show: () => { overlay.classList.add('visible'); playSfxEvent('pause'); },
     hide: () => overlay.classList.remove('visible'),
     isVisible: () => overlay.classList.contains('visible'),
   };
@@ -118,12 +117,12 @@ function showLevelCompleteOverlay(stars: number, onNext: () => void): void {
   if (starsEl) starsEl.textContent = '\u2606'.repeat(3);
   if (scoreEl) scoreEl.textContent = '';
   overlay.classList.add('visible');
-  playSfx(SFX_PATH + 'level_complete.mp3', 0.5);
+  playSfxEvent('levelComplete');
   let revealed = 0;
   const revealNext = () => {
     if (revealed < stars && starsEl) {
       starsEl.textContent = '\u2605'.repeat(revealed + 1) + '\u2606'.repeat(3 - revealed - 1);
-      playSfx(SFX_PATH + 'coin.mp3', 0.25, 0.9 + revealed * 0.1);
+      playSfxEvent('coin', 0.9 + revealed * 0.1);
       revealed++;
       if (revealed < stars) setTimeout(revealNext, 280);
     }
@@ -387,7 +386,7 @@ async function main(): Promise<void> {
     lives--;
     invincibleUntil = performance.now() / 1000 + INVINCIBLE_DURATION;
     cameraShake(0.35, 0.2);
-    playSfx(SFX_PATH + 'hurt.mp3', 0.6);
+    playSfxEvent('hurt');
     showDamageFlash();
     const levelData = LEVELS[currentLevelIndex];
     if (levelData) player.setPosition(respawnPosition.x, respawnPosition.y, respawnPosition.z);
@@ -421,13 +420,20 @@ async function main(): Promise<void> {
 
   const menuPlay = document.getElementById('menu-play');
   const menuMusicSlider = document.getElementById('menu-music-volume') as HTMLInputElement | null;
+  const menuSfxSlider = document.getElementById('menu-sfx-volume') as HTMLInputElement | null;
   if (menuMusicSlider) {
     menuMusicSlider.value = String(Math.round(getMusicVolume() * 100));
     menuMusicSlider.addEventListener('input', () => {
       setMusicVolume(Number(menuMusicSlider.value) / 100);
     });
   }
-  if (menuPlay) menuPlay.addEventListener('click', startGame);
+  if (menuSfxSlider) {
+    menuSfxSlider.value = String(Math.round(getSfxVolume() * 100));
+    menuSfxSlider.addEventListener('input', () => {
+      setSfxVolume(Number(menuSfxSlider.value) / 100);
+    });
+  }
+  if (menuPlay) menuPlay.addEventListener('click', () => { playSfxEvent('click'); startGame(); });
 
   let prevTime = performance.now() / 1000;
 
@@ -505,9 +511,9 @@ async function main(): Promise<void> {
       dust(particleSystem, player.mesh.position.clone());
       cameraShake(0.15, 0.08);
       landingFovBump = -4;
-      playSfxWithPitch(SFX_PATH + 'land.mp3', 0.4);
+      playSfxEvent('land', 0.95 + Math.random() * 0.1);
     }
-    if (player.justJumped) playSfxWithPitch(SFX_PATH + 'jump.mp3', 0.4);
+    if (player.justJumped) playSfxEvent('jump', 0.95 + Math.random() * 0.1);
 
     const speedXZ = Math.sqrt(player.velocity.x ** 2 + player.velocity.z ** 2);
     if (player.onGround && player.sprinting && speedXZ > 5) {
@@ -549,7 +555,7 @@ async function main(): Promise<void> {
         if (c.value >= 25) coinCollectBig(particleSystem, c.mesh.position.clone());
         else coinCollect(particleSystem, c.mesh.position.clone());
         showScorePopup(`+${c.value}`);
-        playSfxWithPitch(SFX_PATH + 'coin.mp3', 0.5);
+        playSfxEvent('coin', 0.95 + Math.random() * 0.1);
         scene.remove(c.mesh);
         score += c.value;
         updateHUD(currentLevelIndex, score, lives, levelData.requireAllCoins ? { requireAllCoins: true, collected: coins.filter((x) => x.collected).length, total: coins.length } : undefined);
@@ -566,7 +572,7 @@ async function main(): Promise<void> {
         scene.remove(p.mesh);
         player.doubleJumpRemaining = 1;
         showScorePopup('Double Jump!');
-        playSfxWithPitch(SFX_PATH + 'coin.mp3', 0.4);
+        playSfxEvent('powerUp');
       }
     });
 
@@ -581,7 +587,7 @@ async function main(): Promise<void> {
           respawnPosition.set(cp[0], cp[1], cp[2]);
           if (wasDifferent) {
             showScorePopup('Checkpoint!');
-            playSfx(SFX_PATH + 'coin.mp3', 0.25);
+            playSfxEvent('checkpoint');
           }
           break;
         }
@@ -619,7 +625,7 @@ async function main(): Promise<void> {
         enemyDeath(particleSystem, e.position.clone());
         cameraShake(0.25, 0.12);
         showStompFlash();
-        playSfxWithPitch(SFX_PATH + 'stomp.mp3', 0.5);
+        playSfxEvent('stomp', 0.95 + Math.random() * 0.1);
         timeScale = 0.5;
         const stompScore = e.type === 'chaser' ? 30 : 20;
         score += stompScore;
@@ -639,7 +645,7 @@ async function main(): Promise<void> {
           bossHit(particleSystem, boss.position.clone());
           cameraShake(0.2, 0.1);
           showStompFlash();
-          playSfxWithPitch(SFX_PATH + 'boss_hit.mp3', 0.55);
+          playSfxEvent('bossHit', 0.95 + Math.random() * 0.1);
           boss.flashHit(nowSec + 0.15);
           timeScale = 0.35;
           if (boss.health <= 0) {
@@ -648,7 +654,7 @@ async function main(): Promise<void> {
             scene.remove(boss.mesh);
             boss = null;
             cameraShake(0.4, 0.2);
-            playSfxWithPitch(SFX_PATH + 'boss_death.mp3', 0.6);
+            playSfxEvent('bossDeath');
             timeScale = 0.4;
             score += 100;
             updateHUD(currentLevelIndex, score, lives, levelData.requireAllCoins ? { requireAllCoins: true, collected: coins.filter((x) => x.collected).length, total: coins.length } : undefined);
@@ -664,7 +670,7 @@ async function main(): Promise<void> {
       transitioning = true;
       timeScale = 0.5;
       cameraShake(0.2, 0.15);
-      playSfxWithPitch(SFX_PATH + 'goal.mp3', 0.5);
+      playSfxEvent('goal');
       if (currentLevelIndex + 1 >= TOTAL_LEVELS) {
         const allCoins = coins.every((c) => c.collected);
         const stars = Math.min(3, 1 + (allCoins ? 1 : 0) + (!hadDamageThisLevel ? 1 : 0));
