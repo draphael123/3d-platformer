@@ -2,16 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <meta name="description" content="A 3D platformer: jump, collect coins, stomp enemies, and reach the goal across 20 levels." />
+    <meta property="og:title" content="3D Platformer" />
+    <meta property="og:description" content="Jump, explore, and reach the goal across 20 levels. Collect coins, avoid hazards, stomp enemies." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%233498db' width='32' height='32' rx='4'/%3E%3Cpath fill='%23fff' d='M16 8l-2 6h-6l5 4-2 6 5-4 5 4-2-6 5-4h-6z'/%3E%3C/svg%3E" />
     <title>3D Platformer</title>
     <style>
       * { margin: 0; padding: 0; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #87ceeb; }
       #app { width: 100%; height: 100%; position: relative; background: #87ceeb; }
-      #app canvas { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 0; }
+      #app canvas { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+      #app.game-started canvas { pointer-events: auto; }
       #vignette { position: absolute; inset: 0; z-index: 0.5; pointer-events: none; background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 0%, transparent 55%, rgba(0,0,0,0.25) 100%); }
       #app > *:not(canvas):not(#vignette) { position: relative; z-index: 1; }
-      #hud { position: absolute; top: 12px; left: 12px; color: #fff; font: 18px sans-serif; text-shadow: 0 1px 3px #000; z-index: 2; display: flex; align-items: center; gap: 16px; }
+      #hud { position: absolute; top: clamp(8px, 2vw, 12px); left: clamp(8px, 2vw, 12px); color: #fff; font: clamp(14px, 3.5vw, 18px) sans-serif; text-shadow: 0 1px 3px #000; z-index: 2; display: flex; align-items: center; gap: clamp(8px, 2vw, 16px); }
       #hud-hearts { display: flex; gap: 4px; font-size: 24px; }
       #hud-hearts .heart { transition: transform 0.15s, opacity 0.2s; }
       #hud-hearts .heart.lost { transform: scale(0); opacity: 0; }
@@ -51,7 +57,7 @@
       .overlay-btn:active { transform: scale(0.95); }
       #main-menu { display: flex; position: absolute; inset: 0; background: linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); z-index: 20; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
       #main-menu.hidden { display: none; }
-      .menu-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 32px 40px; max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
+      .menu-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: clamp(20px, 4vw, 32px) clamp(24px, 5vw, 40px); max-width: min(480px, 92vw); width: 100%; max-height: 85vh; overflow-y: auto; }
       .menu-card h1 { color: #e8d5b7; font: 32px sans-serif; margin-bottom: 8px; text-align: center; }
       .menu-card .intro { color: #b8b8c8; font: 15px sans-serif; line-height: 1.5; margin-bottom: 24px; text-align: center; }
       .menu-card h2 { color: #a0c4e8; font: 16px sans-serif; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -62,6 +68,30 @@
       .menu-play { display: block; width: 100%; margin-top: 28px; padding: 16px 24px; font-size: 20px; font-weight: bold; cursor: pointer; background: linear-gradient(180deg, #3498db, #2980b9); color: #fff; border: none; border-radius: 12px; transition: transform 0.08s, box-shadow 0.08s; }
       .menu-play:hover { background: linear-gradient(180deg, #5dade2, #3498db); box-shadow: 0 4px 20px rgba(52, 152, 219, 0.4); }
       .menu-play:active { transform: scale(0.98); }
+      #level-select-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 12px 0; max-height: 180px; overflow-y: auto; }
+      .level-select-btn { padding: 10px 8px; font-size: 12px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #c8c8d8; text-align: center; transition: background 0.15s, border-color 0.15s; }
+      .level-select-btn:hover:not(:disabled) { background: rgba(52, 152, 219, 0.3); border-color: #3498db; color: #fff; }
+      .level-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .level-select-btn.selected { background: rgba(52, 152, 219, 0.4); border-color: #3498db; color: #fff; }
+      .level-select-btn .stars { color: #ffd700; font-size: 11px; margin-top: 2px; }
+      #loading-overlay { display: flex; position: absolute; inset: 0; background: rgba(0,0,0,0.7); z-index: 15; align-items: center; justify-content: center; color: #fff; font: 20px sans-serif; }
+      #loading-overlay.hidden { display: none; }
+      #game-over-overlay { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.88); z-index: 12; align-items: center; justify-content: center; flex-direction: column; padding: 24px; }
+      #game-over-overlay.visible { display: flex; }
+      #game-over-overlay h2 { color: #e74c3c; font: 32px sans-serif; margin-bottom: 16px; }
+      #game-over-overlay .summary { color: #ccc; font: 16px sans-serif; margin-bottom: 24px; text-align: center; line-height: 1.6; }
+      #pause-overlay button.main-menu-btn { background: #555; margin-top: 16px; }
+      #pause-overlay button.main-menu-btn:hover { background: #666; }
+      .menu-card .settings-row label.checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      #touch-controls { display: none; position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+      #touch-controls.visible { display: block; pointer-events: auto; }
+      #touch-controls .touch-left { position: absolute; left: 0; bottom: 0; width: 45%; max-width: 200px; height: 140px; display: flex; align-items: flex-end; justify-content: flex-start; gap: 8px; padding: 12px; pointer-events: auto; }
+      #touch-controls .touch-right { position: absolute; right: 0; bottom: 0; width: 45%; max-width: 160px; height: 140px; display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; padding: 12px; pointer-events: auto; }
+      .touch-btn { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.5); color: #fff; font: 14px sans-serif; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: manipulation; }
+      .touch-btn:active { background: rgba(52, 152, 219, 0.6); }
+      .touch-dpad { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 4px; width: 120px; height: 120px; }
+      .touch-dpad .touch-btn { width: 100%; height: 100%; min-width: 36px; min-height: 36px; }
+      .touch-dpad .touch-btn.empty { background: transparent; border: none; pointer-events: none; }
     </style>
   </head>
   <body>
@@ -87,6 +117,8 @@
             <li>Find the <strong>double-jump</strong> power-up to jump again in mid-air.</li>
             <li>Boss levels: dodge attacks and stomp when the boss is dazed.</li>
           </ul>
+          <h2>Level select</h2>
+          <div id="level-select-grid"></div>
           <h2>Settings</h2>
           <div class="settings-row">
             <label for="menu-music-volume">Music</label>
@@ -96,8 +128,20 @@
             <label for="menu-sfx-volume">Sound effects</label>
             <input type="range" id="menu-sfx-volume" min="0" max="100" value="70" title="Sound effects volume">
           </div>
+          <div class="settings-row">
+            <label class="checkbox">
+              <input type="checkbox" id="menu-reduced-motion" title="Reduce screen shake and motion">
+              <span>Reduced motion</span>
+            </label>
+          </div>
           <button type="button" class="menu-play" id="menu-play">Play</button>
         </div>
+      </div>
+      <div id="loading-overlay" class="hidden" aria-live="polite">Loading…</div>
+      <div id="game-over-overlay">
+        <h2>Game Over</h2>
+        <p class="summary" id="game-over-summary"></p>
+        <button type="button" class="overlay-btn" id="game-over-try-again">Try again</button>
       </div>
       <div id="hud">
         <span id="hud-level">Level 1</span>
@@ -125,6 +169,26 @@
         <h2>Paused</h2>
         <button id="resume-btn">Resume</button>
         <button id="restart-btn">Restart Level</button>
+        <button type="button" class="main-menu-btn" id="pause-main-menu-btn">Main menu</button>
+      </div>
+      <div id="touch-controls">
+        <div class="touch-left">
+          <div class="touch-dpad">
+            <span class="touch-btn empty"></span>
+            <button type="button" class="touch-btn" id="touch-up" aria-label="Forward">▲</button>
+            <span class="touch-btn empty"></span>
+            <button type="button" class="touch-btn" id="touch-left" aria-label="Left">◀</button>
+            <span class="touch-btn empty"></span>
+            <button type="button" class="touch-btn" id="touch-right" aria-label="Right">▶</button>
+            <span class="touch-btn empty"></span>
+            <button type="button" class="touch-btn" id="touch-down" aria-label="Back">▼</button>
+            <span class="touch-btn empty"></span>
+          </div>
+        </div>
+        <div class="touch-right">
+          <button type="button" class="touch-btn" id="touch-jump" aria-label="Jump">Jump</button>
+          <button type="button" class="touch-btn" id="touch-sprint" aria-label="Sprint">Run</button>
+        </div>
       </div>
       <div id="load-error" style="display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.92); color: #fff; align-items: center; justify-content: center; flex-direction: column; padding: 24px; font: 18px sans-serif; z-index: 9999;">
         <h2 style="margin-bottom: 16px; color: #f88;">Failed to start game</h2>

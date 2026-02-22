@@ -3,6 +3,8 @@ import { createWorld } from './world';
 import { Player } from './player';
 import { playLevelMusic, stopLevelMusic, playSfxEvent, getMusicVolume, setMusicVolume, getSfxVolume, setSfxVolume } from './audio';
 import { LEVELS, TOTAL_LEVELS, type LevelData } from './types';
+import { getProgress, unlockLevel, updateBestScore } from './progress';
+import { getReducedMotion, setReducedMotion } from './settings';
 import { Coin, aabbOverlap } from './entities/Coin';
 import { Hazard } from './entities/Hazard';
 import { Enemy } from './entities/Enemy';
@@ -20,15 +22,21 @@ const INVINCIBLE_DURATION = 1.5;
 const INITIAL_LIVES = 3;
 const BASE_FOV = 75;
 
-function createPauseOverlay(onResume: () => void, onRestart: () => void): { show: () => void; hide: () => void; isVisible: () => boolean } {
+function createPauseOverlay(
+  onResume: () => void,
+  onRestart: () => void,
+  onMainMenu: () => void
+): { show: () => void; hide: () => void; isVisible: () => boolean } {
   const overlay = document.getElementById('pause-overlay');
   const resumeBtn = document.getElementById('resume-btn');
   const restartBtn = document.getElementById('restart-btn');
+  const mainMenuBtn = document.getElementById('pause-main-menu-btn');
   if (!overlay || !resumeBtn || !restartBtn) {
     return { show: () => {}, hide: () => {}, isVisible: () => false };
   }
   resumeBtn.onclick = () => onResume();
   restartBtn.onclick = () => onRestart();
+  if (mainMenuBtn) mainMenuBtn.onclick = () => { onMainMenu(); };
   return {
     show: () => { overlay.classList.add('visible'); playSfxEvent('pause'); },
     hide: () => overlay.classList.remove('visible'),
@@ -140,12 +148,12 @@ function showLevelCompleteOverlay(stars: number, onNext: () => void): void {
   }, 2800);
 }
 
-function showWinOverlay(finalScore: number, onPlayAgain: () => void): void {
+function showWinOverlay(finalScore: number, totalStars: number, onPlayAgain: () => void): void {
   const overlay = document.getElementById('win-overlay');
   const scoreEl = document.getElementById('win-score');
   const btn = document.getElementById('win-play-again');
   if (!overlay || !btn) return;
-  if (scoreEl) scoreEl.textContent = `Final score: ${finalScore}`;
+  if (scoreEl) scoreEl.textContent = `Final score: ${finalScore} · Total stars: ${totalStars}/60`;
   overlay.classList.add('visible');
   btn.onclick = () => {
     overlay.classList.remove('visible');
@@ -174,6 +182,24 @@ function showStompFlash(): void {
 function setTransitionVisible(visible: boolean): void {
   const el = document.getElementById('transition-overlay');
   if (el) el.classList.toggle('visible', visible);
+}
+
+function showGameOverOverlay(levelIndex: number, stars: number, score: number, onTryAgain: () => void): void {
+  const overlay = document.getElementById('game-over-overlay');
+  const summaryEl = document.getElementById('game-over-summary');
+  const btn = document.getElementById('game-over-try-again');
+  if (!overlay || !btn) return;
+  if (summaryEl) summaryEl.textContent = `Reached Level ${levelIndex + 1} · Stars: ${stars} · Score: ${score}`;
+  overlay.classList.add('visible');
+  btn.onclick = () => {
+    overlay.classList.remove('visible');
+    onTryAgain();
+  };
+}
+
+function setLoadingVisible(visible: boolean): void {
+  const el = document.getElementById('loading-overlay');
+  if (el) el.classList.toggle('hidden', !visible);
 }
 
 function makeGradientTexture(topHex: number, bottomHex: number): THREE.CanvasTexture {
@@ -274,6 +300,15 @@ async function main(): Promise<void> {
       paused = false;
       pauseOverlay.hide();
       loadLevel(currentLevelIndex);
+    },
+    () => {
+      paused = false;
+      pauseOverlay.hide();
+      stopLevelMusic();
+      selectedLevelIndex = currentLevelIndex;
+      container.classList.remove('game-started');
+      const menu = document.getElementById('main-menu');
+      if (menu) menu.classList.remove('hidden');
     }
   );
 
@@ -390,10 +425,20 @@ async function main(): Promise<void> {
 
         updateHUD(levelIndex, score, lives, levelData.requireAllCoins ? { requireAllCoins: true, collected: 0, total: coins.length } : undefined);
         transitioning = false;
+        setLoadingVisible(false);
         showLevelIntro(levelIndex, levelData.name);
         if (useTransition) {
           setTimeout(() => setTransitionVisible(false), 300);
         }
+      })
+      .catch((err) => {
+        console.error('Level load failed:', err);
+        transitioning = false;
+        setLoadingVisible(false);
+        const menu = document.getElementById('main-menu');
+        if (menu) menu.classList.remove('hidden');
+        container.classList.remove('game-started');
+        showLoadError(err);
       });
     }
     if (useTransition) {
@@ -417,9 +462,13 @@ async function main(): Promise<void> {
     resetPlayerJuiceScale(player.mesh);
     updateHUD(currentLevelIndex, score, lives, levelData?.requireAllCoins ? { requireAllCoins: true, collected: coins.filter((x) => x.collected).length, total: coins.length } : undefined);
     if (lives <= 0) {
-      lives = INITIAL_LIVES;
-      score = 0;
-      loadLevel(0, false);
+      updateBestScore(score);
+      const starsForLevel = getStoredStars()[currentLevelIndex] ?? 0;
+      showGameOverOverlay(currentLevelIndex, starsForLevel, score, () => {
+        lives = INITIAL_LIVES;
+        score = 0;
+        loadLevel(0, false);
+      });
     }
   }
 
@@ -435,16 +484,46 @@ async function main(): Promise<void> {
     return true;
   }
 
+  let selectedLevelIndex = Math.min(getProgress().highestUnlockedLevel, TOTAL_LEVELS - 1);
+
   function startGame(): void {
     const menu = document.getElementById('main-menu');
     if (menu) menu.classList.add('hidden');
-    loadLevel(0, false);
+    container.classList.add('game-started');
+    setLoadingVisible(true);
+    loadLevel(selectedLevelIndex, false);
     animate();
+  }
+
+  const levelSelectGrid = document.getElementById('level-select-grid');
+  if (levelSelectGrid) {
+    const progress = getProgress();
+    const starsMap = getStoredStars();
+    for (let i = 0; i < TOTAL_LEVELS; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'level-select-btn' + (i === selectedLevelIndex ? ' selected' : '');
+      btn.dataset.level = String(i);
+      const levelData = LEVELS[i];
+      const name = levelData?.name ?? `Level ${i + 1}`;
+      const stars = starsMap[i] ?? 0;
+      btn.innerHTML = `${name}<br><span class="stars">${'\u2605'.repeat(stars)}${'\u2606'.repeat(3 - stars)}</span>`;
+      btn.disabled = i > progress.highestUnlockedLevel;
+      btn.onclick = () => {
+        if (btn.disabled) return;
+        selectedLevelIndex = i;
+        levelSelectGrid.querySelectorAll('.level-select-btn').forEach((b) => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        playSfxEvent('click');
+      };
+      levelSelectGrid.appendChild(btn);
+    }
   }
 
   const menuPlay = document.getElementById('menu-play');
   const menuMusicSlider = document.getElementById('menu-music-volume') as HTMLInputElement | null;
   const menuSfxSlider = document.getElementById('menu-sfx-volume') as HTMLInputElement | null;
+  const menuReducedMotion = document.getElementById('menu-reduced-motion') as HTMLInputElement | null;
   if (menuMusicSlider) {
     menuMusicSlider.value = String(Math.round(getMusicVolume() * 100));
     menuMusicSlider.addEventListener('input', () => {
@@ -457,7 +536,39 @@ async function main(): Promise<void> {
       setSfxVolume(Number(menuSfxSlider.value) / 100);
     });
   }
-  if (menuPlay) menuPlay.addEventListener('click', () => { playSfxEvent('click'); startGame(); });
+  if (menuReducedMotion) {
+    menuReducedMotion.checked = getReducedMotion();
+    menuReducedMotion.addEventListener('change', () => setReducedMotion(menuReducedMotion.checked));
+  }
+  if (menuPlay) {
+    menuPlay.addEventListener('click', () => {
+      try { playSfxEvent('click'); } catch { /* ignore */ }
+      startGame();
+    });
+  }
+
+  const touchControls = document.getElementById('touch-controls');
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (hasTouch && touchControls) {
+    touchControls.classList.add('visible');
+    const bindTouch = (id: string, key: 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint') => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const press = () => player.setInput(key, true);
+      const release = () => player.setInput(key, false);
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); press(); });
+      el.addEventListener('touchend', (e) => { e.preventDefault(); release(); });
+      el.addEventListener('mousedown', press);
+      el.addEventListener('mouseup', release);
+      el.addEventListener('mouseleave', release);
+    };
+    bindTouch('touch-up', 'forward');
+    bindTouch('touch-down', 'back');
+    bindTouch('touch-left', 'left');
+    bindTouch('touch-right', 'right');
+    bindTouch('touch-jump', 'jump');
+    bindTouch('touch-sprint', 'sprint');
+  }
 
   let prevTime = performance.now() / 1000;
 
@@ -699,8 +810,11 @@ async function main(): Promise<void> {
         const allCoins = coins.every((c) => c.collected);
         const stars = Math.min(3, 1 + (allCoins ? 1 : 0) + (!hadDamageThisLevel ? 1 : 0));
         setStoredStars(currentLevelIndex, stars);
+        unlockLevel(currentLevelIndex);
+        updateBestScore(score);
         updateHUD(currentLevelIndex, score, lives, levelData.requireAllCoins ? { requireAllCoins: true, collected: coins.filter((x) => x.collected).length, total: coins.length } : undefined);
-        showWinOverlay(score, () => {
+        const totalStars = Object.values(getStoredStars()).reduce((a, b) => a + b, 0);
+        showWinOverlay(score, totalStars, () => {
           currentLevelIndex = 0;
           score = 0;
           lives = INITIAL_LIVES;
@@ -710,6 +824,8 @@ async function main(): Promise<void> {
         const allCoins = coins.every((c) => c.collected);
         const stars = Math.min(3, 1 + (allCoins ? 1 : 0) + (!hadDamageThisLevel ? 1 : 0));
         setStoredStars(currentLevelIndex, stars);
+        unlockLevel(currentLevelIndex);
+        updateBestScore(score);
         currentLevelIndex++;
         showLevelCompleteOverlay(stars, () => loadLevel(currentLevelIndex));
       }
